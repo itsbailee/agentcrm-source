@@ -1,0 +1,11 @@
+node_modules/
+dist/
+public/bundle.js
+public/bundle.css
+_deploy.asar.unpacked/
+*.asar
+*.log
+*.db
+*.db-shm
+*.db-wal
+.DS_Store

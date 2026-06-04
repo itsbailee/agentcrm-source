@@ -1,0 +1,70 @@
+{
+  "name": "agent-crm",
+  "version": "1.1.65",
+  "description": "Real Estate Agent CRM - SMS Outreach Tool",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "restart": "pkill -f 'electron .' 2>/dev/null; sleep 0.3; electron .",
+    "build:react": "node build.js",
+    "build": "node build.js && electron-builder --mac dmg",
+    "dist": "node build.js && electron-builder --mac dmg",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "com.chrisnold.agentcrm",
+    "productName": "AgentCRM",
+    "icon": "build/icon.icns",
+    "mac": {
+      "identity": null,
+      "icon": "build/icon.icns",
+      "category": "public.app-category.business",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "darkModeSupport": true
+    },
+    "dmg": {
+      "title": "AgentCRM",
+      "icon": "build/icon.icns",
+      "window": {
+        "width": 600,
+        "height": 400
+      }
+    },
+    "files": [
+      "**/*",
+      "!src/**",
+      "!dist/**",
+      "!node_modules/.cache/**",
+      "!deploy.js",
+      "!release.js",
+      "!build.js",
+      "!CLAUDE.md",
+      "!_*.asar"
+    ],
+    "asarUnpack": [
+      "public/sounds/**"
+    ],
+    "electronVersion": "33.2.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
+    "axios": "^1.7.0",
+    "better-sqlite3": "^12.8.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.3",
+    "electron": "^33.4.11",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.24.0"
+  }
+}
