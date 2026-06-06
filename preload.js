@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld('api', {
   getBlastPreview: (id) => ipcRenderer.invoke('campaigns:getBlastPreview', id),
   getFollowUpPreview: (id) => ipcRenderer.invoke('campaigns:getFollowUpPreview', id),
   startFollowUpBlast: (data) => ipcRenderer.invoke('campaigns:followUpBlast', data),
+  getAllFollowUpPreview: () => ipcRenderer.invoke('campaigns:getAllFollowUpPreview'),
+  startAllFollowUpBlast: (data) => ipcRenderer.invoke('campaigns:allFollowUpBlast', data),
   resumeCampaign: (id) => ipcRenderer.invoke('campaigns:resume', id),
   resetCampaign: (id) => ipcRenderer.invoke('campaigns:reset', id),
   getAuditLog: () => ipcRenderer.invoke('audit:getLog'),

@@ -1111,6 +1111,17 @@ function getLeadPipelineStats() {
   return row || { total: 0, no_go: 0, contracts: 0, closed: 0 };
 }
 
+function getAllFollowUpContacts() {
+  return db.prepare(`
+    SELECT co.id, co.first_name, co.name, co.phone
+    FROM contacts co
+    JOIN conversations cv ON cv.contact_id = co.id
+    WHERE cv.category = 'follow_up'
+    AND COALESCE(cv.archived, 0) = 0
+    ORDER BY cv.last_message_at DESC
+  `).all();
+}
+
 function getFollowUpContactsForCampaign(campaignId) {
   return db.prepare(`
     SELECT co.id, co.first_name, co.name, co.phone
@@ -1195,6 +1206,6 @@ module.exports = {
   getOverviewStats,
   runDemo,
   createLeadSubmission, getLeadSubmissions, getLeadSubmission, updateLeadSubmission, deleteLeadSubmission, getConversationMedia,
-  getFollowUpContactsForCampaign, getCampaignConversationStats, getLeadKPIsByCampaign, getLeadPipelineStats,
+  getAllFollowUpContacts, getFollowUpContactsForCampaign, getCampaignConversationStats, getLeadKPIsByCampaign, getLeadPipelineStats,
   getConversationDepthStats,
 };

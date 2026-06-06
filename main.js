@@ -787,6 +787,78 @@ ipcMain.handle('campaigns:followUpBlast', async (_, { campaignId, message }) => 
   return { sent, failed };
 });
 
+ipcMain.handle('campaigns:getAllFollowUpPreview', () => {
+  const settings = db.getAllSettings();
+  const contacts = db.getAllFollowUpContacts();
+  const dailyUsed = db.getDailyCount();
+  const dailyCap = Math.min(parseInt(settings.dailyCap || '10000', 10), 10000);
+  return {
+    followUpCount: contacts.length,
+    contacts,
+    dailyCap,
+    dailyUsed,
+    dailyRemaining: dailyCap - dailyUsed,
+    liveSmsEnabled: settings.liveSmsEnabled === 'true',
+    a2pApproved: settings.a2pApproved === 'true',
+    killSwitch: settings.killSwitch === 'true',
+    phoneNumber: settings.phoneNumber || '',
+  };
+});
+
+ipcMain.handle('campaigns:allFollowUpBlast', async (_, { message }) => {
+  const settings = db.getAllSettings();
+  assertCanSend('+15550000000', settings, { skipDailyCapCheck: true });
+  const dailyUsed = db.getDailyCount();
+  const dailyCap = Math.min(parseInt(settings.dailyCap || '10000', 10), 10000);
+  if (dailyUsed >= dailyCap) throw new Error(`Daily send cap of ${dailyCap} reached.`);
+
+  const contacts = db.getAllFollowUpContacts();
+  if (contacts.length === 0) throw new Error('No follow-up contacts found across any campaign.');
+
+  const template = sanitizeForGSM7((message || '').trim() ||
+    "Hey {firstName}, just checking back in with you. Do you have anything off-market I can look at?");
+
+  blastCancelled = false;
+  let sent = 0, failed = 0;
+  const total = contacts.length;
+
+  for (const contact of contacts) {
+    if (blastCancelled) break;
+    if (db.getSetting('killSwitch') === 'true') break;
+
+    const phone = twilio.normalizePhone(contact.phone);
+    try {
+      assertCanSend(phone, settings, { skipDailyCapCheck: true });
+    } catch (guardErr) {
+      db.logAudit('all_followup_skipped', { contactId: contact.id, phone, reason: guardErr.message });
+      failed++;
+      if (mainWindow && !mainWindow.isDestroyed())
+        mainWindow.webContents.send('blast-progress', { sent, failed, total });
+      continue;
+    }
+
+    try {
+      const firstName = contact.first_name || (contact.name || '').split(' ')[0] || '';
+      const body = twilio.buildBlastMessage(template, firstName);
+      const result = await twilio.sendSMS(
+        settings.accountSid, settings.authToken, settings.phoneNumber, phone, body, settings.messagingServiceSid
+      );
+      db.logAudit('all_followup_sent', { contactId: contact.id, phone, sid: result.sid });
+      sent++;
+    } catch (e) {
+      db.logAudit('all_followup_failed', { contactId: contact.id, phone, error: e.message });
+      failed++;
+    }
+
+    if (mainWindow && !mainWindow.isDestroyed())
+      mainWindow.webContents.send('blast-progress', { sent, failed, total });
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  db.logAudit('all_followup_blast_complete', { sent, failed });
+  return { sent, failed };
+});
+
 ipcMain.handle('campaigns:refreshStats', async (_, campaignId) => {
   const settings = db.getAllSettings();
   if (!settings.accountSid || !settings.authToken) {

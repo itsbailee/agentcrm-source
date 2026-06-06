@@ -161,6 +161,119 @@ function PipelineRows({ convStats, onClick }) {
   );
 }
 
+function AllFollowUpBlastModal({ preview, onConfirm, onCancel }) {
+  const [message, setMessage] = useState("Hey {firstName}, just checking back in with you. Do you have anything off-market I can look at?");
+  const [listOpen, setListOpen] = useState(false);
+  const willSend = Math.min(preview.followUpCount, preview.dailyRemaining);
+  const blocked = !preview.liveSmsEnabled || !preview.a2pApproved || preview.killSwitch || preview.followUpCount === 0;
+
+  const Row = ({ label, value, warn, good }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '3px 0', borderBottom: '1px dotted var(--border-sh)' }}>
+      <span style={{ color: 'var(--win-dark)' }}>{label}</span>
+      <span style={{ fontWeight: 'bold', color: warn ? '#880000' : good ? '#006600' : 'var(--win-black)' }}>{value}</span>
+    </div>
+  );
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onCancel()}>
+      <div className="modal" style={{ maxWidth: 480 }}>
+        <div className="modal-header">
+          <span className="modal-title">⏰ FOLLOW-UP BLAST — ALL CAMPAIGNS</span>
+          <button className="modal-close" onClick={onCancel}>×</button>
+        </div>
+        <div className="modal-body">
+
+          <div style={{
+            background: preview.followUpCount > 0 ? '#fffde0' : '#ffe8e8',
+            border: '2px solid', borderColor: preview.followUpCount > 0 ? '#cc8800' : '#cc0000',
+            padding: '10px 14px', marginBottom: 10, textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 32, fontWeight: 'bold', fontFamily: 'var(--font-ui)', color: preview.followUpCount > 0 ? '#884400' : '#880000', lineHeight: 1 }}>
+              {preview.followUpCount}
+            </div>
+            <div style={{ fontSize: 11, fontFamily: 'var(--font-ui)', color: 'var(--win-dark)', marginTop: 4 }}>
+              contact{preview.followUpCount !== 1 ? 's' : ''} marked <strong>Follow-Up</strong> across all campaigns
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 10 }}>
+            <Row label="From number"     value={preview.phoneNumber || '(not set)'}            warn={!preview.phoneNumber} />
+            <Row label="Will send"       value={willSend}                                        good={willSend > 0} warn={willSend === 0} />
+            <Row label="Daily remaining" value={preview.dailyRemaining.toLocaleString()}         warn={preview.dailyRemaining < 10} />
+            <Row label="A2P/10DLC"       value={preview.a2pApproved ? 'Approved' : 'PENDING'}   warn={!preview.a2pApproved} good={preview.a2pApproved} />
+            <Row label="Live SMS"        value={preview.liveSmsEnabled ? 'Enabled' : 'LOCKED'}  warn={!preview.liveSmsEnabled} good={preview.liveSmsEnabled} />
+            <Row label="Kill switch"     value={preview.killSwitch ? 'ACTIVE' : 'Off'}          warn={preview.killSwitch} good={!preview.killSwitch} />
+          </div>
+
+          {preview.contacts?.length > 0 && (
+            <div style={{ marginBottom: 10, border: '2px solid', borderTopColor: 'var(--border-sh)', borderLeftColor: 'var(--border-sh)', borderRightColor: 'var(--border-hi)', borderBottomColor: 'var(--border-hi)' }}>
+              <div
+                onClick={() => setListOpen(o => !o)}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', cursor: 'pointer', background: 'var(--win-gray)', userSelect: 'none' }}
+              >
+                <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 'bold' }}>
+                  {listOpen ? '▼' : '▶'} All Follow-Up Contacts ({preview.contacts.length})
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--win-dark)', fontFamily: 'var(--font-ui)' }}>{listOpen ? 'collapse' : 'expand to review'}</span>
+              </div>
+              {listOpen && (
+                <div style={{ maxHeight: 200, overflowY: 'auto', background: 'var(--win-white)' }}>
+                  {preview.contacts.map((c, i) => (
+                    <div key={c.id} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '4px 8px', borderBottom: '1px dotted var(--border-sh)',
+                      background: i % 2 === 0 ? 'var(--win-white)' : 'var(--win-gray)',
+                    }}>
+                      <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11 }}>{c.name || c.first_name || '(no name)'}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--win-dark)' }}>{c.phone || '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="form-group">
+            <label className="form-label">Follow-Up Message</label>
+            <textarea
+              className="form-textarea"
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              rows={3}
+              style={{ width: '100%', resize: 'vertical' }}
+            />
+            <SegmentCounter text={message.replace(/\{firstName\}/gi, 'Sarah')} />
+            {!analyzeMessage(message.replace(/\{firstName\}/gi, 'Sarah')).isGsm && (
+              <button type="button" className="btn btn-ghost" style={{ marginTop: 6, fontSize: 11 }}
+                onClick={() => setMessage(sanitizeForGSM7(message))}>
+                ⚡ Fix GSM-7
+              </button>
+            )}
+            <div className="form-hint"><span className="highlight">{'{firstName}'}</span> is replaced with each contact's first name on send.</div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+          <button
+            className="btn btn-primary"
+            onClick={() => onConfirm(message)}
+            disabled={blocked}
+            style={{
+              background: blocked ? undefined : 'linear-gradient(180deg, #884400, #552200)',
+              borderTopColor: blocked ? undefined : '#cc7700',
+              borderLeftColor: blocked ? undefined : '#cc7700',
+            }}
+          >
+            {blocked
+              ? (preview.followUpCount === 0 ? '🔒 No Follow-Ups' : '🔒 Blocked')
+              : `⏰ Send to ${willSend} contact${willSend !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const PERIOD_OPTIONS = [
   { value: 'alltime',   label: 'All Time'   },
   { value: '6months',   label: '6 Months'   },
@@ -173,6 +286,9 @@ const PERIOD_OPTIONS = [
 function OverviewPanel({ onNavigate }) {
   const [period, setPeriod] = useState('alltime');
   const [stats, setStats] = useState(null);
+  const [showAllFollowUp, setShowAllFollowUp] = useState(false);
+  const [allFollowUpPreview, setAllFollowUpPreview] = useState(null);
+  const [allBlastState, setAllBlastState] = useState(null); // { sent, failed, total, done }
 
   const load = useCallback(async () => {
     try {
@@ -186,6 +302,34 @@ function OverviewPanel({ onNavigate }) {
     const interval = setInterval(load, 30000);
     return () => clearInterval(interval);
   }, [load]);
+
+  useEffect(() => {
+    const cleanup = window.api.onBlastProgress((progress) => {
+      if (allBlastState && !allBlastState.done)
+        setAllBlastState(prev => prev ? { ...prev, sent: progress.sent, failed: progress.failed, total: progress.total } : null);
+    });
+    return cleanup;
+  }, [allBlastState]);
+
+  const handleShowAllFollowUp = async () => {
+    const preview = await window.api.getAllFollowUpPreview();
+    setAllFollowUpPreview(preview);
+    setShowAllFollowUp(true);
+  };
+
+  const handleAllFollowUpBlast = async (message) => {
+    setShowAllFollowUp(false);
+    setAllFollowUpPreview(null);
+    setAllBlastState({ sent: 0, failed: 0, total: 0, done: false });
+    try {
+      await window.api.startAllFollowUpBlast({ message });
+      setAllBlastState(prev => prev ? { ...prev, done: true } : null);
+      load();
+    } catch (e) {
+      alert('All follow-up blast error: ' + e.message);
+      setAllBlastState(null);
+    }
+  };
 
   const leads = stats?.leads || {};
   const initialLeads = stats?.initialLeads || {};
@@ -260,6 +404,45 @@ function OverviewPanel({ onNavigate }) {
         }}
         onClick={() => onNavigate?.('conversations')}
       />
+
+      {/* All-campaigns follow-up blast */}
+      {followUp > 0 && !allBlastState && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4, marginBottom: 2 }}>
+          <button
+            className="btn btn-sm"
+            onClick={handleShowAllFollowUp}
+            style={{ background: 'linear-gradient(180deg, #884400, #552200)', color: '#fff', borderTopColor: '#cc7700', borderLeftColor: '#cc7700' }}
+          >
+            ⏰ Blast All Follow-Ups ({followUp})
+          </button>
+        </div>
+      )}
+      {allBlastState && (
+        <div style={{
+          border: '2px solid', borderTopColor: 'var(--border-sh)', borderLeftColor: 'var(--border-sh)',
+          borderRightColor: 'var(--border-hi)', borderBottomColor: 'var(--border-hi)',
+          background: 'var(--win-white)', padding: '8px 10px', marginTop: 4, marginBottom: 4,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+            <span style={{ fontWeight: 'bold' }}>{allBlastState.done ? '✓ All follow-ups sent' : `Sending follow-ups...`}</span>
+            <span style={{ color: 'var(--win-dark)' }}>{allBlastState.sent} sent · {allBlastState.failed} failed · {allBlastState.total} total</span>
+          </div>
+          <div className="progress-outer">
+            <div
+              className={`progress-inner${allBlastState.done ? ' progress-static' : ''}`}
+              style={{ width: allBlastState.done ? '100%' : allBlastState.total > 0 ? `${Math.max(Math.round((allBlastState.sent + allBlastState.failed) / allBlastState.total * 100), 2)}%` : '2%' }}
+            />
+          </div>
+        </div>
+      )}
+
+      {showAllFollowUp && allFollowUpPreview && (
+        <AllFollowUpBlastModal
+          preview={allFollowUpPreview}
+          onConfirm={handleAllFollowUpBlast}
+          onCancel={() => { setShowAllFollowUp(false); setAllFollowUpPreview(null); }}
+        />
+      )}
 
       {/* Section: Deal Funnel */}
       <SectionHeader label="Deal Funnel (All Time)" />
