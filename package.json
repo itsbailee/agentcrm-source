@@ -8,7 +8,7 @@
     "restart": "pkill -f 'electron .' 2>/dev/null; sleep 0.3; electron .",
     "build:react": "node build.js",
     "build": "node build.js && electron-builder --mac dmg",
-    "dist": "node build.js && electron-builder --mac dmg",
+    "dist": "node build.js && electron-builder --win",
     "postinstall": "electron-builder install-app-deps"
   },
   "build": {
@@ -37,6 +37,15 @@
         "width": 600,
         "height": 400
       }
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.iconset/icon_512x512.png"
     },
     "files": [
       "**/*",
