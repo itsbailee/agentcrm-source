@@ -511,17 +511,7 @@ ipcMain.handle('dialog:openFile', async () => {
   const columnMap = detectColumnMap(parsed.headers);
   return { filePath, headers: parsed.headers, rows: parsed.rows.slice(0, 5), columnMap, totalRows: parsed.rows.length };
 });
-ipcMain.handle('dnc-add', async (_, phone, contactId) => {
-  db.addToDNC(phone, contactId);
-  return { success: true };
-});
-
-ipcMain.handle('dnc-list', async () => {
-  return db.getDNCList();
-});
-
-ipcMain.handle('dnc-check', async (_, phone) => {
-  return db.isPhoneOnDNC(phone);
+ipcMain.handl
 });
 ipcMain.handle('csv:import', async (_, { filePath, listName, columnMap }) => {
   const content = fs.readFileSync(filePath, 'utf-8');
