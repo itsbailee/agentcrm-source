@@ -106,4 +106,7 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('blast-progress', handler);
     return () => ipcRenderer.removeListener('blast-progress', handler);
   },
+
+  // DNC
+  dncAdd: (phone, contactId) => ipcRenderer.invoke('dnc-add', phone, contactId),
 });

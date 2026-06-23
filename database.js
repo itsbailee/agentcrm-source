@@ -475,8 +475,6 @@ function recordBlastSent(campaignId, contactId, twilioSid, normalizedPhone) {
 }
 
 function recordBlastFailed(campaignId, contactId, error) {
-  // INSERT OR IGNORE: never overwrite a 'sent' record with a failure
-  // normalized_phone intentionally omitted — only successful sends set it
   const result = db.prepare(`
     INSERT OR IGNORE INTO campaign_contacts (campaign_id, contact_id, status, error)
     VALUES (?, ?, 'failed', ?)
@@ -519,7 +517,6 @@ function getCampaignOptOutCount(campaignId) {
 function getCampaignBlastPreview(campaignId) {
   const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
 
-  // All contacts in campaign lists (before exclusion filtering)
   const allContacts = db.prepare(`
     SELECT c.phone FROM contacts c
     JOIN campaign_lists cl ON cl.list_id = c.list_id
@@ -570,8 +567,6 @@ function resetList(listId) {
 
 function resetCampaign(campaignId) {
   db.transaction(() => {
-    // Reset contacts in this campaign's lists from 'blasted' → 'new' so they're eligible again.
-    // Safe: other campaigns keep their own campaign_contacts records, which still exclude these contacts there.
     db.prepare(`
       UPDATE contacts SET status = 'new'
       WHERE status = 'blasted'
@@ -582,9 +577,7 @@ function resetCampaign(campaignId) {
         WHERE cl.campaign_id = ?
       )
     `).run(campaignId);
-    // Clear all send records for this campaign
     db.prepare('DELETE FROM campaign_contacts WHERE campaign_id = ?').run(campaignId);
-    // Reset stats and status
     db.prepare(`
       UPDATE campaigns
       SET status = 'draft', sent_count = 0, failed_count = 0,
@@ -634,7 +627,6 @@ function getOrCreateConversation(contactId) {
       VALUES (?, datetime('now'))
     `).run(contactId);
     conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(result.lastInsertRowid);
-    // Auto-exclude this number from future blasts
     const contact = db.prepare('SELECT phone FROM contacts WHERE id = ?').get(contactId);
     if (contact) addExcludedPhone(contact.phone, contactId);
     updateContactStatus(contactId, 'responded');
@@ -663,7 +655,7 @@ function addMessage(conversationId, body, direction, twilioSid, mediaUrls) {
       WHERE id = ?
     `).run(direction, conversationId);
   }
-  return result.changes > 0; // true = new insert, false = already existed
+  return result.changes > 0;
 }
 
 function markConversationRead(conversationId) {
@@ -734,7 +726,7 @@ function createManualConversation(contactId) {
   return conv;
 }
 
-// ── Demo Runner (all logic here so it has access to the raw db connection) ──
+// ── Demo Runner ──────────────────────────────────────────────────────────────
 
 const DEMO_AGENTS = [
   { name: 'Sarah Mitchell',  first_name: 'Sarah',    last_name: 'Mitchell',  brokerage: 'Keller Williams',    city: 'Charlotte',    state: 'NC', phone: '+15550100001' },
@@ -791,7 +783,6 @@ const DEMO_CATEGORIES = ['new','new','new','new','new','new','new','new','new','
 function runDemo() {
   const ts = Date.now();
 
-  // Clean up any previous demo contacts by phone number
   db.transaction(() => {
     DEMO_AGENTS.forEach(a => {
       const existing = db.prepare('SELECT id FROM contacts WHERE phone = ?').get(a.phone);
@@ -807,10 +798,8 @@ function runDemo() {
     });
   })();
 
-  // Create lead list
   const listId = db.prepare("INSERT INTO lead_lists (name) VALUES (?)").run('Demo — Charlotte Agents').lastInsertRowid;
 
-  // Insert agents
   const insertContact = db.prepare(`
     INSERT INTO contacts (list_id, name, first_name, last_name, phone, brokerage, city, state)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -821,11 +810,9 @@ function runDemo() {
 
   const contacts = db.prepare('SELECT * FROM contacts WHERE list_id = ? ORDER BY id ASC').all(listId);
 
-  // Create campaign
   const campaignId = db.prepare("INSERT INTO campaigns (name, message, status) VALUES (?, ?, 'completed')").run('Demo Campaign', DEMO_BLAST_MSG).lastInsertRowid;
   db.prepare('INSERT INTO campaign_lists (campaign_id, list_id) VALUES (?, ?)').run(campaignId, listId);
 
-  // Mark all 20 as blasted
   const insertCC = db.prepare("INSERT INTO campaign_contacts (campaign_id, contact_id, status, sent_at, twilio_sid) VALUES (?, ?, 'sent', datetime('now'), ?)");
   db.transaction(() => {
     contacts.forEach(c => {
@@ -835,10 +822,8 @@ function runDemo() {
     db.prepare('UPDATE campaigns SET sent_count = ? WHERE id = ?').run(contacts.length, campaignId);
   })();
 
-  // Simulate 10 replies (first 10 contacts)
   db.transaction(() => {
     contacts.slice(0, 10).forEach((contact, i) => {
-      // Create conversation & auto-exclude
       const convId = db.prepare(`
         INSERT INTO conversations (contact_id, category, last_message_at)
         VALUES (?, ?, datetime('now'))
@@ -848,17 +833,13 @@ function runDemo() {
       db.prepare("UPDATE contacts SET status = 'responded' WHERE id = ?").run(contact.id);
       db.prepare('UPDATE campaigns SET response_count = response_count + 1 WHERE id = ?').run(campaignId);
 
-      // Outbound blast
       const blastBody = DEMO_BLAST_MSG.replace(/\{firstName\}/gi, contact.first_name);
       db.prepare("INSERT INTO messages (conversation_id, body, direction, twilio_sid) VALUES (?, ?, 'outbound', ?)").run(convId, blastBody, `DEMO-BLAST-${ts}-${contact.id}`);
-
-      // Their reply
       db.prepare("INSERT INTO messages (conversation_id, body, direction, twilio_sid) VALUES (?, ?, 'inbound', ?)").run(convId, DEMO_RESPONSES[i], `DEMO-REPLY-${ts}-${contact.id}`);
 
-      // Follow-up exchange for first 3
       if (i < 3) {
         db.prepare("INSERT INTO messages (conversation_id, body, direction, twilio_sid) VALUES (?, ?, 'outbound', ?)").run(convId, DEMO_FOLLOWUP_OUT[i], `DEMO-FU1-${ts}-${contact.id}`);
-        db.prepare("INSERT INTO messages (conversation_id, body, direction, twilio_sid) VALUES (?, ?, 'inbound', ?)").run(convId, DEMO_FOLLOWUP_IN[i],  `DEMO-FU2-${ts}-${contact.id}`);
+        db.prepare("INSERT INTO messages (conversation_id, body, direction, twilio_sid) VALUES (?, ?, 'inbound', ?)").run(convId, DEMO_FOLLOWUP_IN[i], `DEMO-FU2-${ts}-${contact.id}`);
       }
 
       db.prepare("UPDATE conversations SET last_message_at = datetime('now'), unread_count = ? WHERE id = ?").run(i < 3 ? 2 : 1, convId);
@@ -919,6 +900,19 @@ function getColdMessageExamples() {
   `).all().map(r => r.body);
 }
 
+// ── DNC (Do Not Contact) ─────────────────────────────────────────────────────
+
+function addToDNC(phone, contactId) {
+  db.transaction(() => {
+    db.prepare('INSERT OR IGNORE INTO stopped_numbers (phone) VALUES (?)').run(phone);
+    db.prepare('INSERT OR IGNORE INTO excluded_phones (phone, contact_id) VALUES (?, ?)').run(phone, contactId || null);
+    db.prepare('DELETE FROM campaign_contacts WHERE contact_id = ?').run(contactId);
+    db.prepare("UPDATE contacts SET status = 'excluded' WHERE id = ?").run(contactId);
+  })();
+}
+
+// ── Contacts ─────────────────────────────────────────────────────────────────
+
 function renameContact(contactId, name) {
   const trimmed = (name || '').trim();
   const parts = trimmed.split(' ');
@@ -958,7 +952,6 @@ function getOverviewStats(period) {
   const leads = {};
   categoryRows.forEach(r => { leads[r.category] = r.count; });
 
-  // Initial category breakdown (first non-'new' category each conversation was ever put in)
   const initCatRows = db.prepare(`
     SELECT initial_cat, COUNT(*) as count FROM (
       SELECT COALESCE(
@@ -1030,7 +1023,6 @@ function deleteLeadSubmission(id) {
 }
 
 function getCampaignConversationStats(campaignId) {
-  // Current category counts
   const rows = db.prepare(`
     SELECT cv.category, COUNT(*) as count
     FROM conversations cv
@@ -1042,8 +1034,6 @@ function getCampaignConversationStats(campaignId) {
   const cats = {};
   rows.forEach(r => { cats[r.category] = r.count; });
 
-  // Initial category counts — first non-'new' category each lead was ever assigned.
-  // Falls back to current category if no log entry exists (pre-migration data).
   const initRows = db.prepare(`
     SELECT initial_cat, COUNT(*) as count FROM (
       SELECT COALESCE(
@@ -1183,6 +1173,7 @@ function getConversationDepthStats() {
 
 module.exports = {
   init,
+  addToDNC,
   getSetting, saveSetting, getAllSettings, saveSettings,
   logAudit, getAuditLog,
   getDailyCount, incrementDailyCount,

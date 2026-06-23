@@ -313,7 +313,15 @@ export default function ChatWindow({ conversation, onCategoryChange, onMessageSe
           <span className="aim-btn-icon">🚫</span>
           <span className="aim-btn-label">Cold</span>
         </button>
-
+<button className="aim-btn" style={{ flex: 1, color: '#cc0000' }} title="Add to DNC list"
+          onClick={async () => {
+            if (!window.confirm(`Add ${conversation.name || conversation.phone} to DNC?\n\nThis will:\n• Block all future SMS\n• Remove from all campaigns\n• Prevent reimport`)) return;
+            await window.api.dncAdd(conversation.phone, conversation.contact_id);
+            onArchive?.(conversation.id);
+          }}>
+          <span className="aim-btn-icon">⛔</span>
+          <span className="aim-btn-label">DNC</span>
+        </button>
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
           <WarningMeter />
           <button
